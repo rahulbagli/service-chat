@@ -1,0 +1,7 @@
+{
+  "tgs-cuv-rewards-order": ["initRedeem", "redeemOrder", "refundOrder"],
+  "tgs-cuv-rewards": ["balance", "transactions", "details"],
+  "tgs-cuv-rewards-redeem": ["wallet", "redeem"],
+  "tgs-cuv-rewards-redemption-account": ["redemption", "accountDetail"],
+  "tgs-cuv-partner-rewards": ["summary"]
+}

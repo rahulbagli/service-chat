@@ -1,0 +1,3 @@
+server:
+  port: 9090
+  servlet.context-path: /v1/service/chatbot

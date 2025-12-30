@@ -1,0 +1,7 @@
+{
+  "execute_api": ["service", "operation", "environment"],
+  "get_postman": ["service"],
+  "get_log": ["service", "environment","correlationid"],
+  "get_request_response": ["service", "operation", "environment"],
+  "get_client_info": ["service", "operation"]
+}
