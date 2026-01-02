@@ -8,91 +8,87 @@ import edu.stanford.nlp.ling.CoreAnnotations;
 import edu.stanford.nlp.ling.CoreLabel;
 import edu.stanford.nlp.pipeline.Annotation;
 import edu.stanford.nlp.util.CoreMap;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import java.lang.invoke.MethodHandles;
 import java.util.*;
+import java.util.regex.Matcher;
 
-import static com.example.servicechat.constants.AppConstants.ENVIRONMENTS;
+import static com.example.servicechat.constants.AppConstants.*;
 
 @Service
 public class FullyAndPartiallyMatched {
 
+    private static final Logger log = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass());
+
+    private final Map<String, List<String>> serviceOperations = JsonMapLoader.load("service-operation.json");
     @Autowired
     private ChatConfig chatConfig;
 
-    private final Map<String, List<String>> serviceOperations = JsonMapLoader.load("service-operation.json");
 
-    private List<String> tokenize(String text) {
-        Annotation annotation = new Annotation(text.toLowerCase());
-        chatConfig.getPipeline().annotate(annotation);
-
-        List<String> tokens = new ArrayList<>();
-        for (CoreMap sentence : annotation.get(CoreAnnotations.SentencesAnnotation.class)) {
-            for (CoreLabel token : sentence.get(CoreAnnotations.TokensAnnotation.class)) {
-                tokens.add(token.lemma());
-            }
-        }
-        return tokens;
-    }
-
-    /** Basic fuzzy similarity scoring */
-    private int similarity(String a, String b) {
-        a = a.toLowerCase();
-        b = b.toLowerCase();
-
-        if (a.equals(b)) return 100;
-        if (b.contains(a)) return 50;
-
-        int score = 0;
-        for (String part : a.split("-")) {
-            if (b.contains(part)) score += 10;
-        }
-
-        for (String aWord : a.split("[-\\s]")) {
-            for (String bWord : b.split("[-\\s]")) {
-                if (aWord.equals(bWord)) score += 20;
-                else if (aWord.length() > 2 && bWord.contains(aWord)) score += 5;
-            }
-        }
-        return score;
-    }
-
-    public Map<String, String> extractEntities(String text, SessionState session, GenerateQueryToken queryTokenUtil) {
-
+    public void updateSessionWithRequiredFields(String text, SessionState session, GenerateQueryToken queryTokenUtil) {
         List<String> tokens = Arrays.stream(text.split(" ")).toList();
-        Map<String, String> entities = session.getProvidedIntentField() != null ? session.getProvidedIntentField() : new HashMap<>();
-
-        if(session.getProvidedIntentField().get("service") == null) {
-            List<String> suggestions = queryTokenUtil.getSuggestedServiceOperations(text);
-            for (String svc : suggestions) {
-                String normalized = svc.replaceAll("[-\\s]+", " ").trim();
-                if (normalized.equalsIgnoreCase(text)) {
-                    entities.put("service", normalized.replaceAll(" ", "-"));
-                    break;
-                }
-                boolean matched = getAllServices().stream()
-                        .map(service -> service.replaceAll("-", " "))
-                        .anyMatch(normalized::equalsIgnoreCase);
-                if (matched) {
-                    entities.put("service", normalized.replaceAll(" ", "-"));
-                    break;
-                }
+        for (String field : session.getRequiredIntentFields()) {
+            if (!session.getProvidedIntentField().containsKey(field)) {
+                switch (field) {
+                    case "service" -> resolveService(session.getProvidedIntentField(), text, queryTokenUtil);
+                    case "operation" -> resolveOperation(session.getProvidedIntentField(), tokens);
+                    case "environment" ->  resolveEnvironment(session.getProvidedIntentField(), tokens);
+                    case "correlationid" -> resolveCorrelationId(session);
+                };
             }
         }
+    }
 
-        if(session.getProvidedIntentField().get("operation") == null) {
-            String service = entities.get("service");
-            String matchedOperation = matchOperation(tokens, service);
+    private void resolveService(Map<String, String> entities, String text, GenerateQueryToken queryTokenUtil) {
 
-            if (matchedOperation != null) {
-                entities.put("operation", matchedOperation);
+        if (entities.containsKey("service")) return;
+
+        List<String> suggestions = queryTokenUtil.getSuggestedServices(text);
+        for (String svc : suggestions) {
+            String normalized = svc.replaceAll("[-\\s]+", " ").trim();
+            if (normalized.equalsIgnoreCase(text)) {
+                entities.put("service", normalized.replaceAll(" ", "-"));
+                break;
+            }
+            boolean matched = getAllServices().stream()
+                    .map(service -> service.replaceAll("-", " "))
+                    .anyMatch(normalized::equalsIgnoreCase);
+            if (matched) {
+                entities.put("service", normalized.replaceAll(" ", "-"));
+                break;
             }
         }
-        if(session.getProvidedIntentField().get("environment") == null) {
-            Optional.ofNullable(matchEnvironment(tokens)).ifPresent(e -> entities.put("environment", e));
+    }
+
+    private void resolveOperation(Map<String, String> entities, List<String> tokens) {
+        if (entities.containsKey("operation")) return;
+        String service = entities.get("service");
+        if (service == null) return;
+        String op = matchOperation(tokens, service);
+        if (op != null) {
+            entities.put("operation", op);
         }
-        return entities;
+    }
+
+    private void resolveEnvironment(Map<String, String> entities, List<String> tokens) {
+        if (entities.containsKey("environment")) return;
+        Optional.ofNullable(matchEnvironment(tokens)).ifPresent(e -> entities.put("environment", e));
+    }
+
+    private void resolveCorrelationId(SessionState session) {
+        Map<String, String> entities = session.getProvidedIntentField();
+        if (entities.containsKey("correlationid")) return;
+
+        String cidText = session.getCurrentUserText() !=null ? session.getCurrentUserText() : session.getActualInitialUserText();
+        Optional<String> cid = extractCorrelationId(cidText);
+        if (cid.isPresent()) {
+            entities.put("correlationid", cid.get());
+            log.info("Correlation ID extracted and stored: {}", cid.get());
+        }
     }
 
     private String matchOperation(List<String> tokens, String service) {
@@ -121,7 +117,9 @@ public class FullyAndPartiallyMatched {
                 .orElse(null);
     }
 
-    /** Utility getters */
+    /**
+     * Utility getters
+     */
     public List<String> getAllServices() {
         return new ArrayList<>(serviceOperations.keySet());
     }
@@ -130,7 +128,9 @@ public class FullyAndPartiallyMatched {
         return serviceOperations.getOrDefault(service, List.of());
     }
 
-    /** Suggest operations based on fuzzy matching */
+    /**
+     * Suggest operations based on fuzzy matching
+     */
     public List<String> getSuggestedOperations(String text, String service) {
         if (text == null || text.isBlank() || service == null) return List.of();
 
@@ -161,4 +161,57 @@ public class FullyAndPartiallyMatched {
                 .map(Map.Entry::getKey)
                 .toList();
     }
+
+    public static Optional<String> extractCorrelationId(String text) {
+        if (text == null || text.isBlank()) {
+            return Optional.empty();
+        }
+        Matcher fullMatcher = UUID_REGEX.matcher(text);
+        if (fullMatcher.find()) {
+            return Optional.of(fullMatcher.group());
+        }
+        Matcher partialMatcher = PARTIAL_UUID_REGEX.matcher(text);
+        if (partialMatcher.find()) {
+            return Optional.of(partialMatcher.group());
+        }
+        return Optional.empty();
+    }
+
+    private List<String> tokenize(String text) {
+        Annotation annotation = new Annotation(text.toLowerCase());
+        chatConfig.getPipeline().annotate(annotation);
+
+        List<String> tokens = new ArrayList<>();
+        for (CoreMap sentence : annotation.get(CoreAnnotations.SentencesAnnotation.class)) {
+            for (CoreLabel token : sentence.get(CoreAnnotations.TokensAnnotation.class)) {
+                tokens.add(token.lemma());
+            }
+        }
+        return tokens;
+    }
+
+    /**
+     * Basic fuzzy similarity scoring
+     */
+    private int similarity(String a, String b) {
+        a = a.toLowerCase();
+        b = b.toLowerCase();
+
+        if (a.equals(b)) return 100;
+        if (b.contains(a)) return 50;
+
+        int score = 0;
+        for (String part : a.split("-")) {
+            if (b.contains(part)) score += 10;
+        }
+
+        for (String aWord : a.split("[-\\s]")) {
+            for (String bWord : b.split("[-\\s]")) {
+                if (aWord.equals(bWord)) score += 20;
+                else if (aWord.length() > 2 && bWord.contains(aWord)) score += 5;
+            }
+        }
+        return score;
+    }
+
 }

@@ -57,7 +57,7 @@ public class GenerateQueryToken {
         return cleanedQuery;
     }
 
-    public List<String> getSuggestedServiceOperations(String query) {
+    public List<String> getSuggestedServices(String query) {
         List<ServiceMatch> matchingServices = serviceMatcher.findMatchingServices(query);
         LOGGER.info("Matching Services:");
         for (int i = 0; i < matchingServices.size(); i++) {

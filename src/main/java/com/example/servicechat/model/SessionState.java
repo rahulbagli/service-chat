@@ -13,7 +13,8 @@ import java.util.Map;
 public class SessionState {
 
     private String intent;
-    private String initialUserText;
+    private String actualInitialUserText; // No processing
+    private String initialUserText;   // processed like remove special char etc..
     private String currentUserText;
     private Map<String, String> providedIntentField = new HashMap<>();
     private List<String> requiredIntentFields = new ArrayList<>();
