@@ -28,6 +28,20 @@ public class FullyAndPartiallyMatched {
     @Autowired
     private ChatConfig chatConfig;
 
+    public static Optional<String> extractCorrelationId(String text) {
+        if (text == null || text.isBlank()) {
+            return Optional.empty();
+        }
+        Matcher fullMatcher = UUID_REGEX.matcher(text);
+        if (fullMatcher.find()) {
+            return Optional.of(fullMatcher.group());
+        }
+        Matcher partialMatcher = PARTIAL_UUID_REGEX.matcher(text);
+        if (partialMatcher.find()) {
+            return Optional.of(partialMatcher.group());
+        }
+        return Optional.empty();
+    }
 
     public void updateSessionWithRequiredFields(String text, SessionState session, GenerateQueryToken queryTokenUtil) {
         List<String> tokens = Arrays.stream(text.split(" ")).toList();
@@ -36,10 +50,24 @@ public class FullyAndPartiallyMatched {
                 switch (field) {
                     case "service" -> resolveService(session.getProvidedIntentField(), text, queryTokenUtil);
                     case "operation" -> resolveOperation(session.getProvidedIntentField(), tokens);
-                    case "environment" ->  resolveEnvironment(session.getProvidedIntentField(), tokens);
-                    case "correlationid" -> resolveCorrelationId(session);
-                };
+                    case "environment" -> resolveEnvironment(session.getProvidedIntentField(), tokens);
+                    case "correlationId" -> resolveCorrelationId(session);
+                    case "scanType" -> resolveScanType(session);
+                }
+                ;
             }
+        }
+    }
+
+    private void resolveScanType(SessionState session) {
+        if (session.getProvidedIntentField().containsKey("scanType")) return;
+
+        String userText = session.getCurrentUserText() != null ? session.getCurrentUserText() : session.getActualInitialUserText();
+        Matcher matcher = SCAN_TYPE.matcher(userText);
+        if (matcher.find()) {
+            log.info("Found: {}", matcher.group());
+        } else {
+            log.info("No match found in: {}", userText);
         }
     }
 
@@ -81,12 +109,17 @@ public class FullyAndPartiallyMatched {
 
     private void resolveCorrelationId(SessionState session) {
         Map<String, String> entities = session.getProvidedIntentField();
-        if (entities.containsKey("correlationid")) return;
+        if (entities.containsKey("correlationId")) return;
+        String cidText;
+        if (session.getCurrentUserText() != null) {
+            cidText = session.getCurrentUserText().replaceAll(" ", "-");
+        } else {
+            cidText = session.getActualInitialUserText();
+        }
 
-        String cidText = session.getCurrentUserText() !=null ? session.getCurrentUserText() : session.getActualInitialUserText();
         Optional<String> cid = extractCorrelationId(cidText);
         if (cid.isPresent()) {
-            entities.put("correlationid", cid.get());
+            entities.put("correlationId", cid.get());
             log.info("Correlation ID extracted and stored: {}", cid.get());
         }
     }
@@ -117,9 +150,6 @@ public class FullyAndPartiallyMatched {
                 .orElse(null);
     }
 
-    /**
-     * Utility getters
-     */
     public List<String> getAllServices() {
         return new ArrayList<>(serviceOperations.keySet());
     }
@@ -128,9 +158,6 @@ public class FullyAndPartiallyMatched {
         return serviceOperations.getOrDefault(service, List.of());
     }
 
-    /**
-     * Suggest operations based on fuzzy matching
-     */
     public List<String> getSuggestedOperations(String text, String service) {
         if (text == null || text.isBlank() || service == null) return List.of();
 
@@ -162,21 +189,6 @@ public class FullyAndPartiallyMatched {
                 .toList();
     }
 
-    public static Optional<String> extractCorrelationId(String text) {
-        if (text == null || text.isBlank()) {
-            return Optional.empty();
-        }
-        Matcher fullMatcher = UUID_REGEX.matcher(text);
-        if (fullMatcher.find()) {
-            return Optional.of(fullMatcher.group());
-        }
-        Matcher partialMatcher = PARTIAL_UUID_REGEX.matcher(text);
-        if (partialMatcher.find()) {
-            return Optional.of(partialMatcher.group());
-        }
-        return Optional.empty();
-    }
-
     private List<String> tokenize(String text) {
         Annotation annotation = new Annotation(text.toLowerCase());
         chatConfig.getPipeline().annotate(annotation);
@@ -190,9 +202,6 @@ public class FullyAndPartiallyMatched {
         return tokens;
     }
 
-    /**
-     * Basic fuzzy similarity scoring
-     */
     private int similarity(String a, String b) {
         a = a.toLowerCase();
         b = b.toLowerCase();
@@ -213,5 +222,4 @@ public class FullyAndPartiallyMatched {
         }
         return score;
     }
-
 }

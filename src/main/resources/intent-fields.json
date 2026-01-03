@@ -1,7 +1,10 @@
 {
   "execute_api": ["service", "operation", "environment"],
   "get_postman": ["service"],
-  "get_log": ["service", "environment","correlationid"],
+  "get_log": ["service", "environment","correlationId"],
   "get_request_response": ["service", "operation", "environment"],
-  "get_client_info": ["service", "operation"]
+  "get_client_info": ["service", "operation"],
+  "get_vulnerabilities": ["service","scanType"],
+  "get_last_scan": ["service","scanType"],
+  "get_api_documentation": ["service"]
 }

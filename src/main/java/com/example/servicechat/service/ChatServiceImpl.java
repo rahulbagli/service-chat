@@ -143,7 +143,7 @@ public class ChatServiceImpl implements ChatService {
             case "service" -> buildServicePrompt();
             case "operation" -> buildOperationPrompt();
             case "environment" -> "Which environment? Options: dev, sit, uat, prod";
-            case "correlationid" ->
+            case "correlationId" ->
                     "Please provide the correlation ID (UUID or token).\nExample: 550e8400-e29b-41d4-a716-465400";
             default -> "Provide " + field;
         };
