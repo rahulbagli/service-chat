@@ -66,6 +66,7 @@ public class FullyAndPartiallyMatched {
         Matcher matcher = SCAN_TYPE.matcher(userText);
         if (matcher.find()) {
             log.info("Found: {}", matcher.group());
+            session.getProvidedIntentField().put("scanType", matcher.group());
         } else {
             log.info("No match found in: {}", userText);
         }
@@ -79,13 +80,6 @@ public class FullyAndPartiallyMatched {
         for (String svc : suggestions) {
             String normalized = svc.replaceAll("[-\\s]+", " ").trim();
             if (normalized.equalsIgnoreCase(text)) {
-                entities.put("service", normalized.replaceAll(" ", "-"));
-                break;
-            }
-            boolean matched = getAllServices().stream()
-                    .map(service -> service.replaceAll("-", " "))
-                    .anyMatch(normalized::equalsIgnoreCase);
-            if (matched) {
                 entities.put("service", normalized.replaceAll(" ", "-"));
                 break;
             }
@@ -148,10 +142,6 @@ public class FullyAndPartiallyMatched {
                 .filter(ENVIRONMENTS::contains)
                 .findFirst()
                 .orElse(null);
-    }
-
-    public List<String> getAllServices() {
-        return new ArrayList<>(serviceOperations.keySet());
     }
 
     public List<String> getOperationsForService(String service) {

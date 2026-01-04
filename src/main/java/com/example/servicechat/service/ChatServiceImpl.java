@@ -118,42 +118,28 @@ public class ChatServiceImpl implements ChatService {
         return response;
     }
 
-
-    private boolean hasMissingFields() {
-        for (String field : session.getRequiredIntentFields()) {
-            if (!session.getProvidedIntentField().containsKey(field)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
     private String getMissingFieldPrompt() {
         for (String field : session.getRequiredIntentFields()) {
             if (!session.getProvidedIntentField().containsKey(field)) {
                 log.info("Building prompt for missing field: {}", field);
-                return buildPrompt(field);
+                return switch (field) {
+                    case "service" -> buildServicePrompt();
+                    case "operation" -> buildOperationPrompt();
+                    case "environment" -> "Which environment? Options: dev, sit, uat, prod";
+                    case "correlationId" ->
+                            "Please provide the correlation ID (UUID or token).\nExample: 550e8400-e29b-41d4-a716-465400";
+                    default -> "Provide " + field;
+                };
             }
         }
         return null;
-    }
-
-    private String buildPrompt(String field) {
-        return switch (field) {
-            case "service" -> buildServicePrompt();
-            case "operation" -> buildOperationPrompt();
-            case "environment" -> "Which environment? Options: dev, sit, uat, prod";
-            case "correlationId" ->
-                    "Please provide the correlation ID (UUID or token).\nExample: 550e8400-e29b-41d4-a716-465400";
-            default -> "Provide " + field;
-        };
     }
 
     private String buildServicePrompt() {
         String text = session.getCurrentUserText() !=null ? session.getCurrentUserText() : session.getInitialUserText();
         List<String> suggestions = queryTokenUtil.getSuggestedServices(text);
         if (!suggestions.isEmpty()) {
-            return "Which service? Suggestions:\n" + String.join("\n", suggestions);
+            return "Which service? Available Suggestions:\n" + String.join("\n", suggestions);
         }
         return "Please provide the service name.";
     }
@@ -163,13 +149,13 @@ public class ChatServiceImpl implements ChatService {
         String service = session.getProvidedIntentField().get("service");
         log.info("Provided Service name: {}", service);
 
-        if (service == null) return "Which operation?";
+        if (service == null) return "Which Service?";
 
         List<String> operations = fullyAndPartiallyMatched.getOperationsForService(service);
         List<String> suggestions = fullyAndPartiallyMatched.getSuggestedOperations(text, service);
 
         return !suggestions.isEmpty()
-                ? "Which operation? Suggestions:\n" + String.join("\n", suggestions)
+                ? "Which operation? Available Suggestions:\n" + String.join("\n", suggestions)
                 : "Which operation? Available operations for " + service + ":\n" + String.join("\n", operations);
     }
 
@@ -177,6 +163,15 @@ public class ChatServiceImpl implements ChatService {
         return queryTokenUtil.checkSpelling(
                 queryTokenUtil.stopWords(
                         queryTokenUtil.removeSpecialCharacter(query)));
+    }
+
+    private boolean hasMissingFields() {
+        for (String field : session.getRequiredIntentFields()) {
+            if (!session.getProvidedIntentField().containsKey(field)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private boolean isSessionComplete() {

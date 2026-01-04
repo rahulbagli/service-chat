@@ -72,8 +72,6 @@ public class GenerateQueryToken {
             ));
         }
 
-
-
         return matchingServices.isEmpty()
                 ? Collections.emptyList()
                 : matchingServices.stream()
