@@ -28,7 +28,7 @@ public class ChatController {
 
     @RequestMapping(value = "/query",
             produces = {MediaType.APPLICATION_JSON_VALUE},
-            consumes = { MediaType.APPLICATION_JSON_VALUE },
+            consumes = { MediaType.TEXT_PLAIN_VALUE },
             method = RequestMethod.POST)
     public ResponseEntity<ChatResponse> chat(@RequestBody String message) {
         LOGGER.info("Received message: {}", message);
